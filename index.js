@@ -142,6 +142,11 @@ async function run() {
       }
     });
 
+    app.get('/test', (req, res) => {
+      res.send('Hello World');
+    }
+    );
+
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
   }
