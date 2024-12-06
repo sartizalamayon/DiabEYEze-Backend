@@ -1,11 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import { Client } from '@gradio/client';
 import dotenv from 'dotenv';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -14,6 +14,38 @@ const __dirname = dirname(__filename);
 const port = process.env.PORT || 3001;
 
 const app = express();
+
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GeminiApi);
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
+
+const generationConfig = {
+  temperature: 1,
+  topP: 0.95,
+  topK: 40,
+  maxOutputTokens: 8192,
+  responseMimeType: "application/json",
+  responseSchema: {
+    type: "object",
+    properties: {
+      response: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          suggestions: {
+            type: "array",
+            items: { type: "string" }
+          },
+          timestamp: { type: "string" }
+        },
+        required: ["message", "suggestions", "timestamp"]
+      }
+    },
+    required: ["response"]
+  },
+};
 
 // Helper function to generate random number within range
 function getRandomNumber(min, max, decimals = 0) {
@@ -24,9 +56,9 @@ function getRandomNumber(min, max, decimals = 0) {
 // Function to generate simulated health metrics
 function generateHealthMetrics() {
   return {
-    glucoseLevel: getRandomNumber(70, 400, 1), // mg/dL
+    glucoseLevel: getRandomNumber(70, 400, 1),
     diabeticNephropathy: "No",
-    intraocularPressure: getRandomNumber(10, 30, 1) // mmHg
+    intraocularPressure: getRandomNumber(10, 30, 1)
   };
 }
 
@@ -49,6 +81,32 @@ const client = new MongoClient(uri, {
   },
 });
 
+// New endpoint for Gemini chat
+app.post("/api/chat", async (req, res) => {
+  try {
+    const chatSession = model.startChat({
+      generationConfig,
+      history: [
+        {
+          role: "user",
+          parts: [{ text: JSON.stringify(req.body) }],
+        }
+      ],
+    });
+
+    const result = await chatSession.sendMessage(req.body.message);
+    const response = JSON.parse(result.response.text());
+    res.json(response);
+  } catch (error) {
+    console.error("Chat error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to process chat message",
+      details: error.message
+    });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
@@ -64,25 +122,10 @@ async function run() {
         }
 
         const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
-        const gradioClient = await Client.connect("sartizAyon/iubat");
-        const result = await gradioClient.predict("/predict", {
-          image: imageBlob,
-        });
 
-        // Extract the prediction with highest confidence
-        const predictions = result.data[0].confidences;
-        const mainPrediction = predictions.reduce((prev, current) => 
-          (prev.confidence > current.confidence) ? prev : current
-        );
-
-        // Generate the formatted response
         const response = {
           success: true,
           prediction: {
-            diabeticRetinopathy: {
-              diagnosis: mainPrediction.label,
-              confidence: (mainPrediction.confidence * 100).toFixed(1) + "%"
-            },
             ...generateHealthMetrics()
           }
         };
@@ -110,10 +153,8 @@ app.get("/", (req, res) => {
   res.send("Hello DiabEye!");
 });
 
-// At the bottom of index.js, modify the app.listen part:
 app.listen(port, '0.0.0.0', () => {
     console.log(`Server is running on http://localhost:${port}`);
-  }); 
+}); 
 
-// Export the app
 export default app;
