@@ -33,12 +33,10 @@ function generateHealthMetrics() {
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-app.use(
-  cors({
-    origin: ["https://cash-taka.vercel.app", "http://localhost:5174", "http://localhost:5173"],
-    credentials: true,
-  })
-);
+app.use(cors({
+    origin: '*',
+    credentials: true
+  }));
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.b6ckjyi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
