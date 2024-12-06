@@ -7,7 +7,6 @@ import { MongoClient, ServerApiVersion } from 'mongodb';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-// Initialize dotenv
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +15,21 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Configure multer for handling file uploads
+// Helper function to generate random number within range
+function getRandomNumber(min, max, decimals = 0) {
+  const num = Math.random() * (max - min) + min;
+  return Number(num.toFixed(decimals));
+}
+
+// Function to generate simulated health metrics
+function generateHealthMetrics() {
+  return {
+    glucoseLevel: getRandomNumber(70, 400, 1), // mg/dL
+    diabeticNephropathy: "No",
+    intraocularPressure: getRandomNumber(10, 30, 1) // mmHg
+  };
+}
+
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -40,33 +53,43 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect to MongoDB
     await client.connect();
     console.log("Connected to MongoDB");
 
-    // API endpoint for diabetic retinopathy prediction
     app.post("/api/predict", upload.single("image"), async (req, res) => {
+      console.log("Received request to /api/predict");
+      
       try {
         if (!req.file) {
+          console.log("No file received");
           return res.status(400).json({ error: "No image file provided" });
         }
 
-        // Convert the buffer to a Blob
         const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
-
-        // Connect to your Hugging Face space
         const gradioClient = await Client.connect("sartizAyon/iubat");
-
-        // Make prediction
         const result = await gradioClient.predict("/predict", {
           image: imageBlob,
         });
 
-        // Send the prediction result
-        res.json({
+        // Extract the prediction with highest confidence
+        const predictions = result.data[0].confidences;
+        const mainPrediction = predictions.reduce((prev, current) => 
+          (prev.confidence > current.confidence) ? prev : current
+        );
+
+        // Generate the formatted response
+        const response = {
           success: true,
-          prediction: result.data,
-        });
+          prediction: {
+            diabeticRetinopathy: {
+              diagnosis: mainPrediction.label,
+              confidence: (mainPrediction.confidence * 100).toFixed(1) + "%"
+            },
+            ...generateHealthMetrics()
+          }
+        };
+
+        res.json(response);
 
       } catch (error) {
         console.error("Prediction error:", error);
