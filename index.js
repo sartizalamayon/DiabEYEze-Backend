@@ -17,11 +17,19 @@ const app = express();
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GeminiApi);
-const model = genAI.getGenerativeModel({
+
+// Chat model for general interactions
+const chatModel = genAI.getGenerativeModel({
   model: "gemini-1.5-flash",
 });
 
-const generationConfig = {
+// Exercise suggestion model
+const exerciseModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
+
+// Chat generation config
+const chatConfig = {
   temperature: 1,
   topP: 0.95,
   topK: 40,
@@ -44,6 +52,33 @@ const generationConfig = {
       }
     },
     required: ["response"]
+  },
+};
+
+// Exercise generation config
+const exerciseConfig = {
+  temperature: 1.7,
+  topP: 0.95,
+  topK: 40,
+  maxOutputTokens: 8192,
+  responseMimeType: "application/json",
+  responseSchema: {
+    type: "object",
+    properties: {
+      suggestedExercises: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            duration: { type: "integer" },
+            caloriesBurned: { type: "number" }
+          },
+          required: ["name", "duration", "caloriesBurned"]
+        }
+      }
+    },
+    required: ["suggestedExercises"]
   },
 };
 
@@ -81,11 +116,11 @@ const client = new MongoClient(uri, {
   },
 });
 
-// New endpoint for Gemini chat
+// Chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const chatSession = model.startChat({
-      generationConfig,
+    const chatSession = chatModel.startChat({
+      generationConfig: chatConfig,
       history: [
         {
           role: "user",
@@ -102,6 +137,49 @@ app.post("/api/chat", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to process chat message",
+      details: error.message
+    });
+  }
+});
+
+// Exercise suggestions endpoint
+app.post("/api/exercise-suggestions", async (req, res) => {
+  try {
+    const { Name, Age, weight, exercisesType, sessionDuration } = req.body;
+    
+    // Construct the prompt
+    const prompt = {
+      input: { Name, Age, weight, exercisesType, sessionDuration, noOfDzifferentExercises: 4 },
+      possibleOutput: {
+        suggestedExercises: [
+          {
+            name: "Running",
+            duration: "here it should be in minutes , so if total exercise count total minutes/ no of exercise",
+            caloriesBurned: "what calories are burned in that exercise for the minutes given"
+          }
+        ]
+      }
+    };
+
+    const chatSession = exerciseModel.startChat({
+      generationConfig: exerciseConfig,
+      history: [
+        {
+          role: "user",
+          parts: [{ text: JSON.stringify(prompt) }],
+        }
+      ],
+    });
+
+    const result = await chatSession.sendMessage(JSON.stringify(req.body));
+    const response = JSON.parse(result.response.text());
+    res.json(response);
+
+  } catch (error) {
+    console.error("Exercise suggestion error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate exercise suggestions",
       details: error.message
     });
   }
@@ -144,8 +222,7 @@ async function run() {
 
     app.get('/test', (req, res) => {
       res.send('Hello World');
-    }
-    );
+    });
 
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
