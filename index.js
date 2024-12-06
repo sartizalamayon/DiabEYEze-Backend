@@ -11,9 +11,9 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const port = process.env.PORT || 3001;
 
 const app = express();
-const port = process.env.PORT || 3001;
 
 // Helper function to generate random number within range
 function getRandomNumber(min, max, decimals = 0) {
@@ -36,7 +36,7 @@ const upload = multer({ storage: storage });
 app.use(cors({
     origin: '*',
     credentials: true
-  }));
+}));
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.b6ckjyi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -110,6 +110,10 @@ app.get("/", (req, res) => {
   res.send("Hello DiabEye!");
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+// At the bottom of index.js, modify the app.listen part:
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running on http://localhost:${port}`);
+  }); 
+
+// Export the app
+export default app;

@@ -1,7 +1,12 @@
-{ 
+{
+  "name": "diabeye-server",
+  "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
-    "@gradio/client": "^1.8.0",
+    "@gradio/client": "^0.12.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
